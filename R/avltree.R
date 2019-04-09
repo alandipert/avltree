@@ -192,6 +192,24 @@ assoc <- function(tree, key, value) {
   balance(insert(tree, key, value))
 }
 
+#' Title
+#'
+#' @param tree
+#'
+#' @return
+#' @export
+#'
+#' @examples
+keys <- function(tree) {
+  if (identical(empty, tree)) {
+    NULL
+  } else {
+    key <- tree$key
+    attr(key, "hash_code") <- NULL
+    c(key, keys(tree$left), keys(tree$right))
+  }
+}
+
 benchmark <- function() {
 
   ks <- as.character(runif(1000))
