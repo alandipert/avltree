@@ -210,6 +210,32 @@ keys <- function(tree) {
   }
 }
 
+#' Title
+#'
+#' @param node
+#'
+#' @return
+#' @export
+#'
+#' @examples
+as.list.AVLEmptyNode <- function(node) {
+  NULL
+}
+
+#' Title
+#'
+#' @param node
+#'
+#' @return
+#' @export
+#'
+#' @examples
+as.list.AVLNode <- function(node) {
+  self <- list()
+  self[[node$key]] <- node$value
+  c(as.list(node$left), self,  as.list(node$right))
+}
+
 benchmark <- function() {
 
   ks <- as.character(runif(1000))
