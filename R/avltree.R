@@ -125,9 +125,9 @@ insert <- function(tree, key, value) {
   } else if (get_hash(key) > get_hash(tree$key)) {
     node(tree$key, tree$value, tree$left, insert(tree$right, key, value))
   } else if (class(tree$value) == "AVLCollisions") {
-      node(tree$key, collisions(append(tree$value, list(key, value))))
+    node(tree$key, collisions(append(tree$value, list(key, value))))
   } else {
-      node(tree$key, collisions(list(list(tree$key, tree$value), list(key, value))))
+    node(tree$key, collisions(list(list(tree$key, tree$value), list(key, value))))
   }
 }
 
