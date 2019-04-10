@@ -1,31 +1,49 @@
+hash_code <- function(x) {
+  UseMethod("hash_code", x)
+}
+
+# The Java algorithm
+hash_code.character <- function(s) {
+  hash <- 0
+  for (x in seq_along(s)) {
+    for (y in seq(1, nchar(s[[x]]))) {
+      hash <- hash*31 + utf8ToInt(substring(s[[x]], y, y))
+    }
+  }
+  hash
+}
+
+hash_code.numeric <- sum
+
+equals <- function(x, y) {
+  UseMethod("equals", x)
+}
+
+# Used to compare keys when their hash codes collide.
+equals.character <- `==`
+equals.numeric <- `==`
+
 #' Sentinel object representing an empty AVL tree map.
 #'
 #' @return
 #' @export
 #'
 #' @examples
-empty <- function() {
-  structure(list(), class = "AVLEmptyNode")
+empty <- structure(list(), class = "AVLEmptyNode")
+
+is_empty <- function(x) {
+  class(x) == "AVLEmptyNode"
 }
 
-get_hash <- function(x) {
-  if(class(x) == "AVLCollisions") return(get_hash(x[[1]]))
-  attr(x, "hash_code")
-}
-
-with_hash <- function(x) {
-  hc <- get_hash(x)
-  if (is.null(hc)) {
-    hc <- hashFunction::murmur3.32(x)
-    attr(x, "hash_code") <- hc
-  }
-  x
-}
-
-node <- function(key, value, left = empty, right = empty) {
+node <- function(key,
+                 value,
+                 key_hash = hash_code(key),
+                 left = empty,
+                 right = empty) {
   structure(
     list(
-      key = with_hash(key),
+      key_hash = key_hash,
+      key = key,
       value = value,
       left = left,
       right = right
@@ -40,7 +58,7 @@ collisions <- function(pairs) {
 
 # TODO cache height
 height <- function(tree, count = 0) {
-  if (identical(tree, empty)) {
+  if (is_empty(tree)) {
     count
   } else {
     max(
@@ -55,27 +73,41 @@ balance_factor <- function(tree) {
 }
 
 rotate_left <- function(tree) {
-  if (identical(tree, empty)) {
+  if (is_empty(tree)) {
     tree
   } else {
     node(
       tree$right$key,
       tree$right$value,
-      node(tree$key, tree$value, tree$left, tree$right$left),
-      tree$right$right
+      key_hash = tree$key_hash,
+      left = node(
+        tree$key,
+        tree$value,
+        key_hash = tree$key_hash,
+        left = tree$left,
+        right = tree$right$left
+      ),
+      right = tree$right$right
     )
   }
 }
 
 rotate_right <- function(tree) {
-  if (identical(tree, empty)) {
+  if (is_empty(tree)) {
     tree
   } else {
     node(
       tree$left$key,
       tree$left$value,
-      tree$left$left,
-      node(tree$key, tree$value, tree$left$right, tree$right)
+      key_hash = tree$left$key_hash,
+      left = tree$left$left,
+      right = node(
+        tree$key,
+        tree$value,
+        key_hash = tree$key_hash,
+        left = tree$left$right,
+        right = tree$right
+      )
     )
   }
 }
@@ -97,7 +129,7 @@ is_right_left_case <- function(tree) {
 }
 
 count <- function(tree) {
-  if (identical(empty, tree)) {
+  if (is_empty(empty)) {
     0
   } else {
     1 + count(tree$left) + count(tree$right)
@@ -106,9 +138,23 @@ count <- function(tree) {
 
 balance <- function(tree) {
   if(is_right_left_case(tree)) {
-    rotate_right(node(tree$key, tree$value, rotate_left(tree$left), tree$right))
+    rotate_right(node(
+        tree$key,
+        tree$value,
+        key_hash = tree$key_hash,
+        left = rotate_left(tree$left),
+        right = tree$right
+      )
+    )
   } else if (is_left_right_case(tree)) {
-    rotate_left(node(tree$key, tree$value, tree$left, rotate_right(tree$right)))
+    rotate_left(node(
+        tree$key,
+        tree$value,
+        key_hash = tree$key_hash,
+        left = tree$left,
+        right = rotate_right(tree$right)
+      )
+    )
   } else if (is_right_case(tree)) {
     rotate_right(tree)
   } else if (is_left_case(tree)) {
@@ -116,18 +162,37 @@ balance <- function(tree) {
   } else tree
 }
 
-insert <- function(tree, key, value) {
-  key <- with_hash(key)
-  if (identical(empty, tree)) {
+insert <- function(tree, key, value, key_hash = hash_code(key)) {
+  if (is_empty(tree)) {
     node(key, value)
-  } else if (get_hash(key) < get_hash(tree$key)) {
-    node(tree$key, tree$value, insert(tree$left, key, value), tree$right)
-  } else if (get_hash(key) > get_hash(tree$key)) {
-    node(tree$key, tree$value, tree$left, insert(tree$right, key, value))
+  } else if (key_hash < tree$key_hash) {
+    node(
+      tree$key,
+      tree$value,
+      key_hash = tree$key_hash,
+      left = insert(tree$left, key, value, key_hash),
+      right = tree$right
+    )
+  } else if (key_hash > tree$key_hash) {
+    node(
+      tree$key,
+      tree$value,
+      key_hash = tree$key_hash,
+      left = tree$left,
+      right = insert(tree$right, key, value, key_hash = key_hash)
+    )
   } else if (class(tree$value) == "AVLCollisions") {
-    node(tree$key, collisions(append(tree$value, list(key, value))))
+    node(
+      tree$key,
+      collisions(append(tree$value, list(key, value))),
+      key_hash = tree$key_hash
+    )
   } else {
-    node(tree$key, collisions(list(list(tree$key, tree$value), list(key, value))))
+    node(
+      tree$key,
+      collisions(list(list(tree$key, tree$value), list(key, value))),
+      key_hash = tree$key_hash
+    )
   }
 }
 
@@ -142,22 +207,22 @@ insert <- function(tree, key, value) {
 #' @export
 #'
 #' @examples
-lookup <- function(tree, key, default = NULL, test = `==`) {
-  key <- with_hash(key)
+lookup <- function(tree, key, default = NULL) {
+  key_hash <- hash_code(key)
   while (TRUE) {
-    if (identical(empty, tree)) return(default)
-    if (get_hash(key) < get_hash(tree$key)) {
+    if (is_empty(tree)) return(default)
+    if (key_hash < tree$key_hash) {
       tree <- tree$left
-    } else if (get_hash(key) > get_hash(tree$key)) {
+    } else if (key_hash > tree$key_hash) {
       tree <- tree$right
-    } else if (get_hash(key) == get_hash(tree$key)
-      && class(tree$value) == "AVLCollisions") {
+    } else if (key_hash == tree$key_hash
+        && class(tree$value) == "AVLCollisions") {
       for (pair in tree$value) {
-        if (test(key, pair[[1]])) return(pair[[2]])
+        if (equals(key, pair[[1]])) return(pair[[2]])
       }
       return(default)
-    } else if (get_hash(key) == get_hash(tree$key)
-      && test(key, tree$key)) {
+    } else if (key_hash == tree$key_hash
+        && equals(key, tree$key)) {
       return(tree$value)
     } else return(default)
   }
@@ -173,9 +238,9 @@ lookup <- function(tree, key, default = NULL, test = `==`) {
 #' @export
 #'
 #' @examples
-contains <- function(tree, key, test = `==`) {
+contains <- function(tree, key) {
   sentinel <- function() {}
-  !identical(sentinel, lookup(tree, key, sentinel, test = test))
+  !identical(sentinel, lookup(tree, key, sentinel))
 }
 
 #' Assoc(iate) a key-value pair with an existing AVL tree map.
@@ -201,12 +266,10 @@ assoc <- function(tree, key, value) {
 #'
 #' @examples
 keys <- function(tree) {
-  if (identical(empty, tree)) {
+  if (is_empty(tree)) {
     NULL
   } else {
-    key <- tree$key
-    attr(key, "hash_code") <- NULL
-    c(key, keys(tree$left), keys(tree$right))
+    c(tree$key, keys(tree$left), keys(tree$right))
   }
 }
 
@@ -236,10 +299,24 @@ as.list.AVLNode <- function(node) {
   c(as.list(node$left), self,  as.list(node$right))
 }
 
+#' Title
+#'
+#' @param node
+#' @param k
+#'
+#' @return
+#' @export
+#'
+#' @examples
+`[[.AVLNode` <- function(node, k) {
+  lookup(node, k)
+}
+
 benchmark <- function() {
 
-  ks <- as.character(runif(1000))
+  ks <- runif(1000)
   t1 <- empty
+  l1 <- list()
   e1 <- new.env(parent = emptyenv())
 
   microbenchmark::microbenchmark({
@@ -248,19 +325,29 @@ benchmark <- function() {
     }
   }, unit = "ms", times = 1)
 
-  profvis::profvis(
+  microbenchmark::microbenchmark({
+    for (k in ks) {
+      l1[[k]] <- k
+    }
+  }, unit = "ms", times = 1)
 
   microbenchmark::microbenchmark({
     for (k in ks) {
       lookup(t1, k)
     }
   }, unit = "ms", times = 1)
-  )
+
   microbenchmark::microbenchmark({
     for (k in ks) {
       lookup(t1, k)
     }
-  }, unit = "ms", times = 1)
+  }, unit = "ms", times = 10)
+
+  microbenchmark::microbenchmark({
+    for (k in ks) {
+      l1[[k]]
+    }
+  }, unit = "ms", times = 10)
 
   microbenchmark::microbenchmark({
     for (k in ks) {
