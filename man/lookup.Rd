@@ -4,7 +4,7 @@
 \alias{lookup}
 \title{Look up the value associated with a key in an AVL tree map.}
 \usage{
-lookup(tree, key, default = NULL, test = `==`)
+lookup(tree, key, default = NULL)
 }
 \arguments{
 \item{test}{}

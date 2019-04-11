@@ -4,7 +4,7 @@
 \alias{contains}
 \title{Determine the presence of a key in the AVL tree map.}
 \usage{
-contains(tree, key, test = `==`)
+contains(tree, key)
 }
 \arguments{
 \item{test}{}

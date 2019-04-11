@@ -2,17 +2,7 @@ hash_code <- function(x) {
   UseMethod("hash_code", x)
 }
 
-# The Java algorithm
-hash_code.character <- function(s) {
-  hash <- 0
-  for (x in seq_along(s)) {
-    for (y in seq(1, nchar(s[[x]]))) {
-      hash <- hash*31 + utf8ToInt(substring(s[[x]], y, y))
-    }
-  }
-  hash
-}
-
+hash_code.character <- hashFunction::murmur3.32
 hash_code.numeric <- sum
 
 equals <- function(x, y) {
@@ -56,7 +46,6 @@ collisions <- function(pairs) {
   structure(pairs, class = "AVLCollisions")
 }
 
-# TODO cache height
 height <- function(tree, count = 0) {
   if (is_empty(tree)) {
     count
@@ -196,6 +185,55 @@ insert <- function(tree, key, value, key_hash = hash_code(key)) {
   }
 }
 
+min_tree <- function(tree) {
+  if (is_empty(tree$left)) tree else min_tree(tree$left)
+}
+
+#' Title
+#'
+#' @param tree
+#' @param key
+#' @param key_hash
+#'
+#' @return
+#' @export
+#'
+#' @examples
+remove <- function(tree, key, key_hash = hash_code(key)) {
+  if (is_empty(tree)) {
+    NULL
+  } else if (key_hash < tree$key_hash) {
+    node(
+      tree$key,
+      tree$value,
+      key_hash = tree$key_hash,
+      left = remove(left, key, key_hash = key_hash),
+      right = right
+    )
+  } else if (key_hash > tree$key_hash) {
+    node(
+      tree$key,
+      tree$value,
+      key_hash = tree$key_hash,
+      left = left,
+      right = remove(right, key, key_hash = key_hash)
+    )
+  } else if (is_empty(tree$left)) {
+    tree$right
+  } else if (is_empty(tree$right)) {
+    tree$left
+  } else {
+    min <- min_tree(tree$right)
+    node(
+      min$key,
+      min$value,
+      key_hash = min$key_hash,
+      left = min$left,
+      right = remove(tree$right, min$key, key_hash = min$key_hash)
+    )
+  }
+}
+
 #' Look up the value associated with a key in an AVL tree map.
 #'
 #' @param tree
@@ -281,90 +319,21 @@ keys <- function(tree) {
 #' @export
 #'
 #' @examples
-as.list.AVLEmptyNode <- function(node) {
-  NULL
-}
+as.list.AVLEmptyNode <- function(node) NULL
 
-#' Title
-#'
-#' @param node
-#'
-#' @return
 #' @export
-#'
-#' @examples
 as.list.AVLNode <- function(node) {
   self <- list()
+  stopifnot(is.character(node$key) || is.symbol(node$key))
   self[[node$key]] <- node$value
   c(as.list(node$left), self,  as.list(node$right))
 }
 
-#' Title
-#'
-#' @param node
-#' @param k
-#'
-#' @return
 #' @export
-#'
-#' @examples
-`[[.AVLNode` <- function(node, k) {
-  lookup(node, k)
-}
+`[[.AVLNode` <- lookup
 
-benchmark <- function() {
+#' @export
+`[[<-.AVLNode` <- assoc
 
-  ks <- runif(1000)
-  t1 <- empty
-  l1 <- list()
-  e1 <- new.env(parent = emptyenv())
-
-  microbenchmark::microbenchmark({
-    for (k in ks) {
-      t1 <- assoc(t1, k, k)
-    }
-  }, unit = "ms", times = 1)
-
-  microbenchmark::microbenchmark({
-    for (k in ks) {
-      l1[[k]] <- k
-    }
-  }, unit = "ms", times = 1)
-
-  microbenchmark::microbenchmark({
-    for (k in ks) {
-      lookup(t1, k)
-    }
-  }, unit = "ms", times = 1)
-
-  microbenchmark::microbenchmark({
-    for (k in ks) {
-      lookup(t1, k)
-    }
-  }, unit = "ms", times = 10)
-
-  microbenchmark::microbenchmark({
-    for (k in ks) {
-      l1[[k]]
-    }
-  }, unit = "ms", times = 10)
-
-  microbenchmark::microbenchmark({
-    for (k in ks) {
-      e1[[k]] <- k
-    }
-  }, unit = "ms", times = 1)
-
-  microbenchmark::microbenchmark({
-    for (k in ks) {
-      e1[[k]]
-    }
-  }, unit = "ms", times = 1)
-}
-
-# Usage
-# t <- assoc(assoc(empty(), "foo", 1), "bar", 2)
-# contains(t, "baz")
-# contains(t, "bar")
-# lookup(t, "foo")
-
+#' @export
+`[[<-.AVLEmptyNode` <- assoc
